@@ -36,11 +36,11 @@ const interviewSchema = new mongoose.Schema({
       text: String,
       ts: { type: Date, default: Date.now },
       attempt: Number,
-      duration: Number, // ⭐ ADDED: For speech duration
+      duration: Number,
     },
   ],
   
-  // ⭐ NEW: Store conversation history for dynamic interviews
+  // Store conversation history for dynamic interviews
   conversationHistory: [
     {
       question: String,

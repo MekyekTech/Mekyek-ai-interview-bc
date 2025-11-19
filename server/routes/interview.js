@@ -7,20 +7,20 @@ import Interview from "../models/Interview.js";
 const router = Router();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// ⭐ Get interview by ID
+// get interview by id
 router.get("/:interviewId", async (req, res) => {
   try {
-    console.log("\n📋 GET INTERVIEW");
+    console.log("\n get interview");
     console.log("Interview ID:", req.params.interviewId);
     
     const doc = await Interview.findOne({ interviewId: req.params.interviewId });
     
     if (!doc) {
-      console.log("❌ Interview not found");
+      console.log("Interview not found");
       return res.status(404).json({ error: "Interview not found" });
     }
     
-    console.log("✅ Interview found");
+    console.log("Interview found");
     
     return res.json({
       ok: true,
@@ -37,17 +37,17 @@ router.get("/:interviewId", async (req, res) => {
     });
 
   } catch (e) {
-    console.error("❌ Error:", e.message);
+    console.error("Error:", e.message);
     return res.status(500).json({ error: e.message });
   }
 });
 
-// ⭐ FIXED: Get interview by token (accepts JWT or direct interviewId)
+// get interview by token 
 router.get("/token/:token", async (req, res) => {
   try {
     const { token } = req.params;
 
-    console.log("\n🔐 VERIFYING TOKEN");
+    console.log("\n verifying token");
     console.log("Token:", token.substring(0, 20) + "...");
 
     if (!token) {
@@ -56,37 +56,37 @@ router.get("/token/:token", async (req, res) => {
 
     let interview = null;
 
-    // Try as JWT first
+    // try jwt validation
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || "dev-secret-key");
-      console.log("✅ JWT decoded");
+      console.log("jwt decoded");
       if (decoded.type === "interview_access") {
         interview = await Interview.findOne({ interviewId: decoded.interviewId }).exec();
       }
     } catch (jwtErr) {
-      console.log("   JWT validation failed, trying as direct interviewId...");
+      console.log("jwt validation failed, trying direct interviewId...");
     }
 
-    // ⭐ If not found, try as direct interviewId (from email link)
+    // fallback: direct interviewId
     if (!interview) {
-      console.log("   Trying direct interviewId lookup...");
+      console.log("trying direct interviewId lookup...");
       interview = await Interview.findOne({ interviewId: token }).exec();
       if (interview) {
-        console.log("✅ Found by direct interviewId");
+        console.log("found by direct interviewId");
       }
     }
 
     if (!interview) {
-      console.log("❌ Interview not found");
+      console.log("Interview not found");
       return res.status(404).json({ error: "Interview not found" });
     }
 
     if (interview.status === "completed") {
-      console.log("❌ Interview already completed");
+      console.log("Interview already completed");
       return res.status(400).json({ error: "Interview already completed" });
     }
 
-    console.log("✅ Token verified successfully");
+    console.log("token verified successfully");
 
     return res.json({
       ok: true,
@@ -102,18 +102,18 @@ router.get("/token/:token", async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ Token error:", error.message);
+    console.error("token error:", error.message);
     return res.status(500).json({ error: error.message });
   }
 });
 
-// ⭐ Generate next AI question
+// generate next ai question
 router.post("/:interviewId/next-question", async (req, res) => {
   try {
     const { interviewId } = req.params;
     const { lastAnswer, isFirstQuestion } = req.body;
 
-    console.log("\n🤖 GENERATING NEXT QUESTION");
+    console.log("\n generating next question");
     console.log("Interview ID:", interviewId);
     console.log("Is First:", isFirstQuestion);
 
@@ -127,84 +127,64 @@ router.post("/:interviewId/next-question", async (req, res) => {
 
     let prompt = "";
 
+    // first question prompt
     if (isFirstQuestion) {
       prompt = `You are a Professional AI Interviewer conducting an interview for: ${interview.role}
 
 Required Skills: ${interview.skills.join(", ")}
 Experience Level: ${interview.experience} years
 
-🎯 YOUR TASK:
-Start the interview with a warm, friendly opening question. Ask the candidate to introduce themselves briefly and tell you about their background.
+Your task:
+Start the interview with a simple introduction question asking the candidate to introduce themselves.
 
-IMPORTANT: Return ONLY the question text, no analysis, no commentary, no formatting.
-
-Example: "Hello! Thank you for joining us today. To start, could you please introduce yourself and tell me about your background and experience?"`;
+Return only the question text without any explanation.`;
 
     } else {
       const conversationContext = conversationHistory.map((item, idx) => 
         `Q${idx + 1}: ${item.question}\nA${idx + 1}: ${item.answer}`
       ).join("\n\n");
 
-      prompt = `You are a Professional AI Interviewer for: ${interview.role} (${interview.experience} years experience, Skills: ${interview.skills.join(", ")})
+      // dynamic next question prompt
+      prompt = `You are an AI interviewer for: ${interview.role} (${interview.experience} years experience)
 
-📌 INTERVIEW STRUCTURE:
-1. Introduction (completed)
-2. Technical Skills Assessment
-3. Experience-Based Questions
-4. Problem-Solving Scenarios
-5. Behavioral Questions
-6. Closing
+Rules:
+- Generate one unique question
+- No repetition
+- Adjust question difficulty based on last answer
+- Keep it short and clear
 
-🧠 RULES:
-- Generate ONE question at a time
-- Each question MUST be DIFFERENT from previous questions
-- Adapt difficulty based on candidate's responses
-- If answer is weak → ask easier follow-up
-- If answer is strong → go deeper with advanced topics
-- Reference previous answers when relevant
-- Keep questions SHORT and CLEAR
-- Focus on required skills: ${interview.skills.join(", ")}
-
-CONVERSATION SO FAR:
+Conversation so far:
 ${conversationContext}
 
-CANDIDATE'S LAST ANSWER: 
+Candidate's last answer:
 ${lastAnswer}
 
-Based on the above conversation, generate the NEXT UNIQUE QUESTION.
-
-⚠️ CRITICAL:
-- Return ONLY the next question text
-- Do NOT repeat any previous questions
-- If sufficient evaluation (${conversationHistory.length} exchanges), return exactly: "INTERVIEW_COMPLETE"`;
-
+Generate the next question. If interview is complete return only: INTERVIEW_COMPLETE`;
     }
 
-    console.log("📤 Sending prompt to AI...");
     const result = await model.generateContent(prompt);
     const nextQuestion = result.response.text().trim();
 
-    console.log("✅ AI Question generated");
+    console.log("ai question generated");
 
-    // Check for completion
+    // mark interview complete
     if (nextQuestion === "INTERVIEW_COMPLETE" || conversationHistory.length >= 15) {
-      console.log("🏁 Interview complete");
       return res.json({
         ok: true,
         question: null,
         isComplete: true,
-        message: "Thank you! The interview is complete."
+        message: "Interview complete."
       });
     }
 
-    // Check if question already asked
+    // detect duplicate question
     const isDuplicate = conversationHistory.some(item => 
       item.question.toLowerCase().includes(nextQuestion.toLowerCase().substring(0, 50))
     );
 
     if (isDuplicate) {
-      console.log("⚠️ Duplicate detected, regenerating...");
-      const retryPrompt = prompt + "\n\nIMPORTANT: The previous question was a duplicate. Generate a COMPLETELY DIFFERENT question.";
+      console.log("duplicate detected, regenerating...");
+      const retryPrompt = prompt + "\nGenerate a different question.";
       const retryResult = await model.generateContent(retryPrompt);
       const retryQuestion = retryResult.response.text().trim();
       
@@ -224,35 +204,30 @@ Based on the above conversation, generate the NEXT UNIQUE QUESTION.
     });
 
   } catch (error) {
-    console.error("❌ Question generation error:", error.message);
+    console.error("question generation error:", error.message);
     return res.status(500).json({ error: error.message });
   }
 });
 
-// ⭐ Save answer
+// save answer
 router.post("/:interviewId/answer", async (req, res) => {
   try {
     const { interviewId } = req.params;
     const { question, answer, duration, questionId, text, attempt } = req.body;
 
-    console.log("\n💾 SAVE ANSWER");
+    console.log("\n save answer");
     console.log("Interview:", interviewId);
 
     if (!interviewId) return res.status(400).json({ error: "interviewId required" });
 
     const interview = await Interview.findOne({ interviewId }).exec();
     if (!interview) {
-      console.log("❌ Interview not found");
       return res.status(404).json({ error: "Interview not found" });
     }
 
-    console.log("✅ Interview found");
-
-    // Handle dynamic format
+    // dynamic mode
     if (question && answer) {
-      console.log("📝 Saving as conversationHistory (dynamic mode)");
-      
-      const updatedWithConversation = await Interview.findOneAndUpdate(
+      const updated = await Interview.findOneAndUpdate(
         { interviewId },
         {
           $push: {
@@ -267,25 +242,18 @@ router.post("/:interviewId/answer", async (req, res) => {
         { new: true }
       ).exec();
 
-      console.log("✅ Conversation saved, total exchanges:", updatedWithConversation.conversationHistory?.length);
-
       return res.json({ 
         ok: true, 
         message: "Answer saved",
-        count: updatedWithConversation.conversationHistory?.length
+        count: updated.conversationHistory?.length
       });
     } 
-    // Handle traditional format
+    // traditional mode
     else if (questionId && text) {
-      console.log("📝 Saving as answers (traditional mode)");
-      
       const questionExists = interview.questions?.some(q => q.id === questionId);
-      if (!questionExists) {
-        console.log("❌ Question not found");
-        return res.status(400).json({ error: "Question not found" });
-      }
+      if (!questionExists) return res.status(400).json({ error: "Question not found" });
 
-      const updatedWithAnswer = await Interview.findOneAndUpdate(
+      const updated = await Interview.findOneAndUpdate(
         { interviewId },
         {
           $push: {
@@ -301,21 +269,18 @@ router.post("/:interviewId/answer", async (req, res) => {
         { new: true }
       ).exec();
 
-      console.log("✅ Answer saved, total:", updatedWithAnswer.answers?.length);
-
       return res.json({ 
         ok: true, 
         message: "Answer saved",
-        count: updatedWithAnswer.answers?.length
+        count: updated.answers?.length
       });
     } 
     else {
-      console.log("❌ Invalid request format");
       return res.status(400).json({ error: "Invalid request format" });
     }
 
   } catch (error) {
-    console.error("❌ EXCEPTION:", error.message);
+    console.error("exception:", error.message);
     return res.status(500).json({
       error: "Server error",
       details: error.message
@@ -323,13 +288,13 @@ router.post("/:interviewId/answer", async (req, res) => {
   }
 });
 
-// Complete on close
+// complete when tab/browser closed
 router.post("/:interviewId/complete-on-close", async (req, res) => {
   try {
     const { interviewId } = req.params;
     const { status, reason, tabWarnings, fullscreenWarnings } = req.body;
 
-    console.log("🚪 Browser closed - Completing interview:", interviewId);
+    console.log("browser closed - marking interview completed:", interviewId);
 
     const interview = await Interview.findOne({ interviewId }).exec();
     if (!interview) {
@@ -342,7 +307,7 @@ router.post("/:interviewId/complete-on-close", async (req, res) => {
         status: "completed",
         completedAt: new Date(),
         "result.status": "INCOMPLETE",
-        "result.reason": reason || "User closed browser/tab",
+        "result.reason": reason || "User closed browser",
         "result.tabWarnings": tabWarnings || 0,
         "result.fullscreenWarnings": fullscreenWarnings || 0,
         "result.completedAt": new Date()
@@ -357,20 +322,16 @@ router.post("/:interviewId/complete-on-close", async (req, res) => {
         isFailed: false,
         isIncomplete: true
       }
-    ).catch(err => {
-      console.error("Evaluation failed:", err.message);
-    });
-
-    console.log("✅ Interview marked as completed");
+    ).catch(err => console.error("Evaluation failed:", err.message));
 
     return res.json({ ok: true, message: "Interview completed" });
   } catch (error) {
-    console.error("❌ Complete on close error:", error.message);
+    console.error("complete on close error:", error.message);
     return res.status(500).json({ error: error.message });
   }
 });
 
-// Update status
+// update status
 router.post("/:interviewId/status", async (req, res) => {
   try {
     const { status } = req.body;
@@ -382,9 +343,7 @@ router.post("/:interviewId/status", async (req, res) => {
 
     const interview = await Interview.findOne({ interviewId: req.params.interviewId });
     if (interview && interview.status === "completed") {
-      return res.status(400).json({ 
-        error: "This interview is already completed" 
-      });
+      return res.status(400).json({ error: "This interview is already completed" });
     }
     
     const doc = await Interview.findOneAndUpdate(
@@ -400,22 +359,21 @@ router.post("/:interviewId/status", async (req, res) => {
     
     if (!doc) return res.status(404).json({ error: "Interview not found" });
     
-    console.log("✅ Status updated to:", status);
     return res.json({ ok: true, status: doc.status });
 
   } catch (e) {
-    console.error("❌ Error:", e.message);
+    console.error("error:", e.message);
     return res.status(500).json({ error: e.message });
   }
 });
 
-// ⭐ Evaluate interview
+// evaluate interview
 router.post("/:interviewId/evaluate", async (req, res) => {
   try {
     const { interviewId } = req.params;
     const { tabWarnings = 0, fullscreenWarnings = 0, isFailed = false, isIncomplete = false } = req.body;
 
-    console.log("\n🤖 EVALUATING INTERVIEW");
+    console.log("\n evaluating interview");
     console.log("Interview ID:", interviewId);
 
     const interview = await Interview.findOne({ interviewId }).exec();
@@ -425,14 +383,14 @@ router.post("/:interviewId/evaluate", async (req, res) => {
 
     let evaluation = null;
 
-    // Handle failures
+    // fail cases
     if (isFailed) {
       evaluation = {
         overallScore: 0,
         answers: [],
         strengths: [],
-        weaknesses: ["Failed to maintain focus on interview"],
-        summary: "Interview terminated due to 3 violations.",
+        weaknesses: ["Failed to maintain focus"],
+        summary: "Interview terminated due to violations.",
         recommendation: "FAIL",
         evaluatedAt: new Date()
       };
@@ -445,42 +403,38 @@ router.post("/:interviewId/evaluate", async (req, res) => {
       return res.json({ ok: true, evaluation, result: { status: "FAIL" } });
     }
 
+    // incomplete cases
     if (isIncomplete) {
       evaluation = {
         overallScore: 0,
         answers: [],
         strengths: [],
         weaknesses: ["Interview not completed"],
-        summary: "Interview was closed before completion.",
+        summary: "Interview was closed early.",
         recommendation: "INCOMPLETE",
         evaluatedAt: new Date()
       };
 
       await Interview.findOneAndUpdate(
         { interviewId },
-        { $set: { evaluation, result: { status: "INCOMPLETE", reason: "Closed before completion", tabWarnings, fullscreenWarnings, completedAt: new Date() } } }
+        { $set: { evaluation, result: { status: "INCOMPLETE", reason: "Closed early", tabWarnings, fullscreenWarnings, completedAt: new Date() } } }
       ).exec();
 
       return res.json({ ok: true, evaluation, result: { status: "INCOMPLETE" } });
     }
 
-    // Check if answers exist
+    // detect answer type
     const isDynamic = interview.conversationHistory && interview.conversationHistory.length > 0;
     const isTraditional = interview.answers && interview.answers.length > 0;
-
-    console.log("   - Dynamic:", isDynamic, "Count:", interview.conversationHistory?.length || 0);
-    console.log("   - Traditional:", isTraditional, "Count:", interview.answers?.length || 0);
 
     if (!isDynamic && !isTraditional) {
       return res.status(400).json({ error: "No answers to evaluate" });
     }
 
-    // Prepare evaluation text
+    // prepare evaluation text
     let evaluationText = "";
     
     if (isDynamic) {
-      console.log("📊 Evaluating DYNAMIC interview");
-      
       const validConversations = interview.conversationHistory.filter(item => 
         item.answer && item.answer.trim().length > 10
       );
@@ -493,7 +447,6 @@ router.post("/:interviewId/evaluate", async (req, res) => {
         `Q${idx + 1}: ${item.question}\nA${idx + 1}: ${item.answer.trim()} (${item.duration}s)`
       ).join("\n\n");
     } else {
-      console.log("📊 Evaluating TRADITIONAL interview");
       const answersWithQuestions = interview.answers.map(answer => {
         const question = interview.questions.find(q => q.id === answer.questionId);
         return {
@@ -514,35 +467,19 @@ router.post("/:interviewId/evaluate", async (req, res) => {
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-    const evaluationPrompt = `You are an expert interview evaluator. Evaluate the following interview for a ${interview.role} position requiring ${interview.experience} years experience.
+    const evaluationPrompt = `You are an interview evaluator. Evaluate the following interview for a ${interview.role} position requiring ${interview.experience} years experience.
 
 Required Skills: ${interview.skills.join(", ")}
 
-INTERVIEW RESPONSES:
+Interview Responses:
 ${evaluationText}
 
-Provide comprehensive evaluation in VALID JSON format (no markdown, no code blocks):
+Return evaluation in valid JSON only.`;
 
-{
-  "answers": [
-    {"questionIndex": 0, "score": 75, "feedback": "Good technical understanding"},
-    {"questionIndex": 1, "score": 80, "feedback": "Clear communication"}
-  ],
-  "overallScore": 78,
-  "strengths": ["Technical knowledge", "Communication skills", "Problem-solving"],
-  "weaknesses": ["More depth needed", "Practical examples lacking"],
-  "summary": "Candidate demonstrates solid understanding with room for growth.",
-  "recommendation": "PASS"
-}`;
-
-    console.log("📤 Sending to AI...");
-    
     const result = await model.generateContent(evaluationPrompt);
     const responseText = result.response.text();
 
-    console.log("✅ AI Response received");
-
-    // Extract JSON
+    // extract JSON
     let jsonMatch = responseText.match(/\{[\s\S]*\}/);
     
     if (!jsonMatch) {
@@ -551,15 +488,10 @@ Provide comprehensive evaluation in VALID JSON format (no markdown, no code bloc
     }
 
     if (!jsonMatch) {
-      console.error("❌ Could not parse AI response");
       throw new Error("Invalid AI response format");
     }
 
     evaluation = JSON.parse(jsonMatch[0]);
-
-    console.log("✅ Evaluation parsed");
-    console.log("   - Score:", evaluation.overallScore);
-    console.log("   - Recommendation:", evaluation.recommendation);
 
     const finalResult = {
       status: evaluation.overallScore >= 75 ? "PASS" : "FAIL",
@@ -587,8 +519,6 @@ Provide comprehensive evaluation in VALID JSON format (no markdown, no code bloc
       }
     ).exec();
 
-    console.log("✅ Evaluation saved");
-
     return res.json({
       ok: true,
       evaluation: {
@@ -603,8 +533,7 @@ Provide comprehensive evaluation in VALID JSON format (no markdown, no code bloc
     });
 
   } catch (error) {
-    console.error("❌ Evaluation error:", error.message);
-    console.error("Stack:", error.stack);
+    console.error("evaluation error:", error.message);
     return res.status(500).json({ 
       error: "Evaluation failed", 
       details: error.message 

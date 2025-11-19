@@ -6,8 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "node -r dotenv/config ./index.js",
-    "start": "node -r dotenv/config ./index.js",
-    "seed": "node -r dotenv/config ./scripts/seed.js"
+    "start": "node -r dotenv/config ./index.js"
   },
   "keywords": [],
   "author": "",

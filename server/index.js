@@ -23,8 +23,7 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
-// // Prevent NoSQL injection
-// app.use(mongoSanitize());
+
 
 // Rate limiting (100 requests per 15 minutes per IP)
 const limiter = rateLimit({
