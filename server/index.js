@@ -9,14 +9,14 @@ import dotenv from "dotenv";
 
 // Load environment variables
 dotenv.config();
-app.set('trust proxy', 1);
+
 // Import routes
 import candidateRoutes from "./routes/candidate.js";
 import interviewRoutes from "./routes/interview.js";
 import integrationRoutes from "./routes/integration.js";
 
 const app = express();
-
+app.set('trust proxy', 1);
 // Security headers
 app.use(helmet({
   contentSecurityPolicy: false,
