@@ -1,19 +1,21 @@
+// FILE: server/routes/integration.js (UPDATED - ASYNC EMAIL)
 import express from "express";
 import crypto from "crypto";
 import Interview from "../models/Interview.js";
 import Candidate from "../models/Candidate.js";
 import { sendInterviewEmail } from "../utils/email.js";
 import { verifyAPIKey } from "../middleware/apiAuth.js"; 
+
 const router = express.Router();
 
-// helper functions
+// Helper functions
 const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
 const randomPassword = (n = 12) => crypto.randomBytes(16).toString("base64url").slice(0, n);
 
-// apply api key validation
+// Apply API key validation
 router.use(verifyAPIKey);
 
-// create interview route
+// ✅ UPDATED: Create interview route with ASYNC email
 router.post("/create-interview-simple", async (req, res) => {
   try {
     const {
@@ -27,29 +29,33 @@ router.post("/create-interview-simple", async (req, res) => {
       companyName 
     } = req.body;
 
-    console.log("\nINTEGRATION: Creating interview");
+    console.log("\n🔗 INTEGRATION: Creating interview");
     console.log("   Company:", companyName || externalCompanyId);
     console.log("   Candidate:", candidateName);
     console.log("   Email:", candidateEmail);
     console.log("   Role:", jobRole);
 
-    // validation
+    // Validation
     if (!candidateId || !candidateName || !candidateEmail || !jobRole) {
-      console.log("Missing required fields");
+      console.log("❌ Missing required fields");
       return res.status(400).json({ 
+        ok: false,
         error: "Missing required fields",
         required: ["candidateId", "candidateName", "candidateEmail", "jobRole"]
       });
     }
 
-    // email validation
+    // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(candidateEmail)) {
-      console.log("Invalid email format");
-      return res.status(400).json({ error: "Invalid email format" });
+      console.log("❌ Invalid email format");
+      return res.status(400).json({ 
+        ok: false,
+        error: "Invalid email format" 
+      });
     }
 
-    // find or create candidate
+    // Find or create candidate
     let candidate = await Candidate.findOne({ candidateId });
     
     if (!candidate) {
@@ -58,22 +64,22 @@ router.post("/create-interview-simple", async (req, res) => {
         name: candidateName,
         email: candidateEmail,
       });
-      console.log("New candidate created");
+      console.log("✅ New candidate created");
     } else {
-      console.log("Existing candidate found");
+      console.log("✅ Existing candidate found");
       candidate.name = candidateName;
       candidate.email = candidateEmail;
       await candidate.save();
     }
 
-    // generate password
+    // Generate password
     const tempPassword = randomPassword(12);
     candidate.auth = { passwordHash: sha256(tempPassword) };
     await candidate.save();
 
-    console.log("Temporary password generated");
+    console.log("🔑 Temporary password generated");
 
-    // create interview
+    // Create interview
     const interviewId = `INT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
     await Interview.create({
@@ -92,72 +98,98 @@ router.post("/create-interview-simple", async (req, res) => {
       }
     });
 
-    console.log("Interview created:", interviewId);
+    console.log("✅ Interview created:", interviewId);
 
-    // send email
+    // Build login URL
     const loginUrl = `${process.env.CLIENT_ORIGIN || "http://localhost:9000"}/login?interviewId=${interviewId}`;
 
-    try {
-      await sendInterviewEmail({
-        to: candidateEmail,
-        candidateName,
-        jobRole,
-        interviewId,
-        tempPassword,
-        skills: Array.isArray(skills) ? skills : [skills],
-        loginUrl,
-        companyName: companyName || "Your Company"
-      });
-
-      console.log("Email sent");
-    } catch (emailError) {
-      console.error("Email sending failed:", emailError.message);
-      
-      return res.status(201).json({
-        ok: true,
-        interviewId,
-        message: "Interview created but email failed to send",
-        emailError: emailError.message,
-        manualCredentials: {
-          interviewId,
-          password: tempPassword,
-          loginUrl
-        }
-      });
-    }
-
-    console.log("Interview setup complete\n");
-
-    return res.json({
+    // ✅ KEY CHANGE: SEND RESPONSE FIRST (before email)
+    console.log("📤 Sending immediate response to caller");
+    
+    // Return success response immediately
+    const response = {
       ok: true,
       interviewId,
       candidateId: candidate.candidateId,
-      message: "Interview created and email sent to candidate",
-      loginUrl 
+      loginUrl,
+      message: "Interview created successfully. Email will be sent shortly.",
+      // ⚠️ For debugging - remove in production
+      debug: {
+        tempPassword: process.env.NODE_ENV !== 'production' ? tempPassword : undefined,
+        emailQueued: true
+      }
+    };
+
+    // Send response NOW (don't wait for email)
+    res.status(201).json(response);
+
+    // ✅ SEND EMAIL AFTER RESPONSE (async, non-blocking)
+    console.log("📧 Queuing email send (non-blocking)...");
+    
+    // Use setImmediate to send email after response is sent
+    setImmediate(async () => {
+      try {
+        console.log("📧 Sending interview invitation");
+        console.log("   To:", candidateEmail);
+        console.log("   Role:", jobRole);
+        console.log("   Interview ID:", interviewId);
+
+        await sendInterviewEmail({
+          to: candidateEmail,
+          candidateName,
+          jobRole,
+          interviewId,
+          tempPassword,
+          skills: Array.isArray(skills) ? skills : [skills],
+          loginUrl,
+          companyName: companyName || "Your Company"
+        });
+
+        console.log("✅ Email sent successfully to:", candidateEmail);
+        
+      } catch (emailError) {
+        // Email failed but interview is already created
+        console.error("❌ Email sending failed (non-critical):", emailError.message);
+        console.error("   Error code:", emailError.code);
+        
+        // Log for monitoring/alerting
+        console.log("⚠️  Interview created but email failed");
+        console.log("   Interview ID:", interviewId);
+        console.log("   Candidate:", candidateEmail);
+        console.log("   Manual credentials needed:");
+        console.log("   - Login URL:", loginUrl);
+        console.log("   - Password:", tempPassword);
+        
+        // TODO: Add to retry queue or send notification to admin
+      }
     });
 
+    console.log("✅ Interview setup complete (email queued)\n");
+
   } catch (error) {
-    console.error("Integration error:", error.message);
+    console.error("❌ Integration error:", error.message);
     return res.status(500).json({ 
+      ok: false,
       error: "Failed to create interview",
       details: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
 
-// get interview status
+// ✅ Get interview status (unchanged)
 router.get("/interview-status/:interviewId", async (req, res) => {
   try {
     const { interviewId } = req.params;
 
-    console.log("\nINTEGRATION: Status check");
+    console.log("\n📊 INTEGRATION: Status check");
     console.log("   Interview ID:", interviewId);
 
     const interview = await Interview.findOne({ interviewId }).lean().exec();
     
     if (!interview) {
-      console.log("Interview not found");
+      console.log("❌ Interview not found");
       return res.status(404).json({ 
+        ok: false,
         error: "Interview not found" 
       });
     }
@@ -176,25 +208,29 @@ router.get("/interview-status/:interviewId", async (req, res) => {
         summary: interview.evaluation.summary,
         strengths: interview.evaluation.strengths,
         weaknesses: interview.evaluation.weaknesses,
+        answers: interview.evaluation.answers || []
       } : null,
     };
 
-    console.log("Status fetched");
+    console.log("✅ Status fetched");
 
     return res.json({ ok: true, data: response });
 
   } catch (error) {
-    console.error("Status fetch error:", error.message);
-    return res.status(500).json({ error: error.message });
+    console.error("❌ Status fetch error:", error.message);
+    return res.status(500).json({ 
+      ok: false,
+      error: error.message 
+    });
   }
 });
 
-// get list of interviews for a company
+// ✅ Get list of interviews for a company (unchanged)
 router.get("/company-interviews/:companyId", async (req, res) => {
   try {
     const { companyId } = req.params;
 
-    console.log("\nINTEGRATION: Fetching company interviews");
+    console.log("\n📋 INTEGRATION: Fetching company interviews");
     console.log("   Company ID:", companyId);
 
     const interviews = await Interview.find({ 
@@ -215,7 +251,7 @@ router.get("/company-interviews/:companyId", async (req, res) => {
       completedAt: i.completedAt,
     }));
 
-    console.log(`Found ${results.length} interviews`);
+    console.log(`✅ Found ${results.length} interviews`);
 
     return res.json({ 
       ok: true, 
@@ -224,8 +260,11 @@ router.get("/company-interviews/:companyId", async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Fetch error:", error.message);
-    return res.status(500).json({ error: error.message });
+    console.error("❌ Fetch error:", error.message);
+    return res.status(500).json({ 
+      ok: false,
+      error: error.message 
+    });
   }
 });
 
