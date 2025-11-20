@@ -315,7 +315,7 @@ router.post("/:interviewId/complete-on-close", async (req, res) => {
     ).exec();
 
     axios.post(
-      `${process.env.API_URL || "http://localhost:4000/api"}/interview/${interviewId}/evaluate`,
+      `${process.env.API_URL || "https://mekyek-ai-interview-bc.onrender.com/api"}/interview/${interviewId}/evaluate`,
       {
         tabWarnings: tabWarnings || 0,
         fullscreenWarnings: fullscreenWarnings || 0,

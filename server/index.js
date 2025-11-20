@@ -9,7 +9,7 @@ import dotenv from "dotenv";
 
 // Load environment variables
 dotenv.config();
-
+app.set('trust proxy', 1);
 // Import routes
 import candidateRoutes from "./routes/candidate.js";
 import interviewRoutes from "./routes/interview.js";
@@ -45,7 +45,8 @@ const allowLocalhost = /^http:\/\/localhost:\d+$/;
 const allowedOrigins = [
   process.env.CLIENT_ORIGIN,
   "http://localhost:9000",
-  "http://localhost:3001"
+  "http://localhost:3001",
+  'https://mekyek-ai-interview-fe-eto8.vercel.app'
 ].filter(Boolean);
 
 const corsOpts = {
