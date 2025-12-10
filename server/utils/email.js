@@ -1,40 +1,38 @@
 import nodemailer from "nodemailer";
 
-// Create transporter (Gmail SMTP)
+// Create transporter with Brevo SMTP
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: parseInt(process.env.SMTP_PORT || 587),
-  secure: false, // Use TLS
+  host: process.env.SMTP_HOST || "smtp-relay.brevo.com",
+  port: parseInt(process.env.SMTP_PORT || "587"),
+  secure: false, // Use TLS (STARTTLS)
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
+    user: process.env.SMTP_USER, 
+    pass: process.env.SMTP_PASS, 
   },
   tls: {
-    rejectUnauthorized: false // For development
+    rejectUnauthorized: true, // Brevo has valid certificates
+    minVersion: 'TLSv1.2'
   }
 });
 
 // Verify connection on startup
 transporter.verify((error, success) => {
   if (error) {
-    console.error("❌ SMTP connection failed:", error.message);
-    console.error("   Check SMTP_USER and SMTP_PASS in .env");
+    console.error("❌ Brevo SMTP connection failed:", error.message);
+    console.error("   Check your Brevo SMTP credentials in .env");
+    console.error("   Host:", process.env.SMTP_HOST || "smtp-relay.brevo.com");
+    console.error("   Port:", process.env.SMTP_PORT || "587");
+    console.error("   User:", process.env.SMTP_USER);
   } else {
-    console.log("✅ Email service ready");
-    console.log(`   Using: ${process.env.SMTP_USER}`);
+    console.log("✅ Brevo Email service ready");
+    console.log(`   Using Brevo SMTP: ${process.env.SMTP_USER}`);
+    console.log("   Host: smtp-relay.brevo.com");
   }
 });
 
 /**
- * Send interview invitation email
+ * Send interview invitation email via Brevo
  * @param {Object} params - Email parameters
- * @param {string} params.to - Recipient email
- * @param {string} params.candidateName - Candidate name
- * @param {string} params.jobRole - Job position
- * @param {string} params.interviewId - Interview ID
- * @param {string} params.tempPassword - Temporary password
- * @param {Array|string} params.skills - Required skills
- * @param {string} params.loginUrl - Login URL
  */
 export const sendInterviewEmail = async ({
   to,
@@ -43,11 +41,13 @@ export const sendInterviewEmail = async ({
   interviewId,
   tempPassword,
   skills,
-  loginUrl
+  loginUrl,
+  companyName = "Mekyek"
 }) => {
   try {
-    console.log('\n📧 Sending interview invitation');
+    console.log('\n📧 Sending interview invitation via Brevo');
     console.log('   To:', to);
+    console.log('   Company:', companyName);
     console.log('   Role:', jobRole);
     console.log('   Interview ID:', interviewId);
 
@@ -59,209 +59,177 @@ export const sendInterviewEmail = async ({
     });
 
     const mailOptions = {
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      from: {
+        name: companyName || 'Mekyek',
+        address: 'mekyek.tech@gmail.com'
+      },
       to: to,
-      subject: `Invitation to Interview at Mekyek`,
+      subject: `AI Interview Invitation - ${jobRole} at ${companyName}`,
       html: `
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Interview Invitation - Mekyek</title>
-          <!--[if mso]>
-          <style type="text/css">
-            body, table, td {font-family: Arial, sans-serif !important;}
-          </style>
-          <![endif]-->
-        </head>
-        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0; padding:0; font-family: Arial, sans-serif; background-color:#f5f5f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f5f5;">
+    <tr>
+      <td align="center" style="padding:40px 20px;">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
           
-          <!-- Email Container -->
-          <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f5f5f5;">
-            <tr>
-              <td align="center" style="padding: 40px 20px;">
-                
-                <!-- Main Card -->
-                <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
-                  
-                  <!-- Header -->
-                  <tr>
-                    <td style="background-color: #ffffff; padding: 40px 32px 24px 32px; border-bottom: 1px solid #e5e7eb;">
-                      <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #1f2937; letter-spacing: -0.3px;">
-                        Mekyek
-                      </h1>
-                    </td>
-                  </tr>
-                  
-                  <!-- Content -->
-                  <tr>
-                    <td style="padding: 32px;">
-                      
-                      <p style="margin: 0 0 8px 0; font-size: 14px; color: #6b7280; font-weight: 500;">
-                        ${currentDate}
-                      </p>
-                      
-                      <p style="margin: 0 0 24px 0; font-size: 16px; color: #374151; line-height: 1.6;">
-                        Dear <strong>${candidateName}</strong>,
-                      </p>
-                      
-                      <p style="margin: 0 0 20px 0; font-size: 16px; color: #374151; line-height: 1.7;">
-                        We were impressed by your application and would like to invite you to interview for the <strong>${jobRole}</strong> position at <strong>Mekyek</strong>.
-                      </p>
-                      
-                      <p style="margin: 0 0 28px 0; font-size: 16px; color: #374151; line-height: 1.7;">
-                        This will be an AI-powered dynamic interview that adapts to your responses. Below are your login credentials:
-                      </p>
-                      
-                      <!-- Credentials -->
-                      <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 28px;">
-                        <tr>
-                          <td style="padding: 20px;">
-                            <table role="presentation" style="width: 100%; border-collapse: collapse;">
-                              
-                              <tr style="border-bottom: 1px solid #e5e7eb;">
-                                <td style="padding: 12px 0; font-size: 14px; color: #6b7280; font-weight: 500;">
-                                  Interview ID:
-                                </td>
-                                <td style="padding: 12px 0; text-align: right;">
-                                  <code style="background-color: #e5e7eb; padding: 6px 12px; border-radius: 4px; font-family: 'Monaco', 'Courier New', monospace; font-size: 13px; color: #1f2937; font-weight: 600;">
-                                    ${interviewId}
-                                  </code>
-                                </td>
-                              </tr>
-                              
-                              <tr style="border-bottom: 1px solid #e5e7eb;">
-                                <td style="padding: 12px 0; font-size: 14px; color: #6b7280; font-weight: 500;">
-                                  Password:
-                                </td>
-                                <td style="padding: 12px 0; text-align: right;">
-                                  <code style="background-color: #fef3c7; padding: 6px 12px; border-radius: 4px; font-family: 'Monaco', 'Courier New', monospace; font-size: 13px; color: #92400e; font-weight: 700;">
-                                    ${tempPassword}
-                                  </code>
-                                </td>
-                              </tr>
-                              
-                              <tr style="border-bottom: 1px solid #e5e7eb;">
-                                <td style="padding: 12px 0; font-size: 14px; color: #6b7280; font-weight: 500;">
-                                  Position:
-                                </td>
-                                <td style="padding: 12px 0; text-align: right; font-size: 14px; color: #1f2937; font-weight: 500;">
-                                  ${jobRole}
-                                </td>
-                              </tr>
-                              
-                              <tr style="border-bottom: 1px solid #e5e7eb;">
-                                <td style="padding: 12px 0; font-size: 14px; color: #6b7280; font-weight: 500;">
-                                  Required Skills:
-                                </td>
-                                <td style="padding: 12px 0; text-align: right; font-size: 14px; color: #1f2937; font-weight: 500;">
-                                  ${skillsList}
-                                </td>
-                              </tr>
-                              
-                              <tr>
-                                <td style="padding: 12px 0; font-size: 14px; color: #6b7280; font-weight: 500;">
-                                  Duration:
-                                </td>
-                                <td style="padding: 12px 0; text-align: right; font-size: 14px; color: #1f2937; font-weight: 500;">
-                                  ~45 minutes
-                                </td>
-                              </tr>
-                              
-                            </table>
-                          </td>
-                        </tr>
-                      </table>
-                      
-                      <!-- Button -->
-                      <table role="presentation" style="width: 100%; border-collapse: collapse; margin-bottom: 28px;">
-                        <tr>
-                          <td align="center">
-                            <a href="${loginUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; padding: 12px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.3);">
-                              Start Interview
-                            </a>
-                          </td>
-                        </tr>
-                      </table>
-                      
-                      <p style="margin: 0 0 20px 0; font-size: 16px; color: #374151; line-height: 1.7;">
-                        Please note that you can only take this interview once. Ensure you're in a quiet environment with:
-                      </p>
-                      
-                      <ul style="margin: 0 0 28px 0; padding-left: 24px; font-size: 16px; color: #374151; line-height: 1.7;">
-                        <li style="margin-bottom: 8px;">Stable internet connection</li>
-                        <li style="margin-bottom: 8px;">Working webcam and microphone</li>
-                        <li style="margin-bottom: 8px;">Desktop or laptop (mobile not recommended)</li>
-                        <li style="margin-bottom: 8px;">At least 45 minutes of uninterrupted time</li>
-                      </ul>
-                      
-                      <p style="margin: 0 0 8px 0; font-size: 16px; color: #374151; line-height: 1.7;">
-                        Best regards,
-                      </p>
-                      
-                      <p style="margin: 0; font-size: 16px; color: #374151; font-weight: 600;">
-                        Mekyek Hiring Team
-                      </p>
-                      
-                    </td>
-                  </tr>
-                  
-                  <!-- Footer -->
-                  <tr>
-                    <td style="background-color: #f9fafb; padding: 24px 32px; text-align: center; border-top: 1px solid #e5e7eb;">
-                      <p style="margin: 0 0 8px 0; font-size: 13px; color: #6b7280;">
-                        This is an automated message from Mekyek
-                      </p>
-                      <p style="margin: 0; font-size: 12px; color: #9ca3af;">
-                        © ${new Date().getFullYear()} Mekyek. All rights reserved.
-                      </p>
-                    </td>
-                  </tr>
-                  
-                </table>
-                
-              </td>
-            </tr>
-          </table>
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding:40px; text-align:center;">
+              <h1 style="margin:0; color:#ffffff; font-size:28px;">🎯 AI Interview Invitation</h1>
+              <p style="margin:10px 0 0; color:#ffffff; font-size:16px;">${companyName}</p>
+            </td>
+          </tr>
           
-        </body>
-        </html>
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px;">
+              <p style="color:#6b7280; font-size:14px; margin:0 0 20px;">${currentDate}</p>
+              
+              <p style="color:#374151; font-size:16px; margin:0 0 20px;">Dear <strong>${candidateName}</strong>,</p>
+              
+              <p style="color:#374151; font-size:16px; line-height:1.6; margin:0 0 20px;">
+                Congratulations! 🎉 We were impressed by your application and would like to invite you to an AI-powered interview for the <strong>${jobRole}</strong> position at <strong>${companyName}</strong>.
+              </p>
+              
+              <!-- Credentials Box -->
+              <table width="100%" cellpadding="20" cellspacing="0" style="background-color:#f0f4ff; border:2px solid #667eea; border-radius:8px; margin:20px 0;">
+                <tr>
+                  <td>
+                    <p style="margin:0 0 15px; color:#667eea; font-size:14px; font-weight:bold;">🔐 YOUR LOGIN CREDENTIALS</p>
+                    
+                    <table width="100%" cellpadding="8" cellspacing="0">
+                      <tr>
+                        <td style="color:#6b7280; font-size:14px; padding:8px 0;">Interview ID:</td>
+                        <td style="text-align:right; padding:8px 0;">
+                          <span style="background-color:#ffffff; padding:8px 12px; border-radius:4px; font-family:monospace; font-size:14px; font-weight:bold; color:#1f2937; border:1px solid #e5e7eb; display:inline-block;">${interviewId}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="color:#6b7280; font-size:14px; padding:8px 0;">Password:</td>
+                        <td style="text-align:right; padding:8px 0;">
+                          <span style="background-color:#fef3c7; padding:8px 12px; border-radius:4px; font-family:monospace; font-size:14px; font-weight:bold; color:#92400e; border:1px solid #fbbf24; display:inline-block;">${tempPassword}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="color:#6b7280; font-size:14px; padding:8px 0;">Position:</td>
+                        <td style="text-align:right; color:#1f2937; font-size:14px; font-weight:bold; padding:8px 0;">${jobRole}</td>
+                      </tr>
+                      <tr>
+                        <td style="color:#6b7280; font-size:14px; padding:8px 0;">Duration:</td>
+                        <td style="text-align:right; color:#1f2937; font-size:14px; font-weight:bold; padding:8px 0;">⏱️ ~45 minutes</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- CTA Button -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:30px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="${loginUrl}" style="display:inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:#ffffff; padding:16px 48px; text-decoration:none; border-radius:8px; font-weight:bold; font-size:16px;">
+                      🚀 Start Your Interview
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Warning Box -->
+              <table width="100%" cellpadding="15" cellspacing="0" style="background-color:#fef3c7; border-left:4px solid #f59e0b; border-radius:6px; margin:20px 0;">
+                <tr>
+                  <td>
+                    <p style="margin:0 0 8px; color:#92400e; font-size:15px; font-weight:bold;">⚠️ Important: One-Time Interview</p>
+                    <p style="margin:0; color:#78350f; font-size:14px;">You can only take this interview <strong>once</strong>. Please ensure you're fully prepared before starting.</p>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Requirements -->
+              <p style="color:#374151; font-size:15px; font-weight:bold; margin:20px 0 10px;">📋 Before You Start:</p>
+              <ul style="color:#374151; font-size:15px; line-height:1.8; margin:0; padding-left:20px;">
+                <li>Stable internet connection (minimum 5 Mbps)</li>
+                <li>Working webcam and microphone</li>
+                <li>Desktop or laptop (mobile not supported)</li>
+                <li>Quiet environment with good lighting</li>
+                <li>At least 60 minutes of uninterrupted time</li>
+                <li>Chrome or Firefox browser (latest version)</li>
+              </ul>
+              
+              <p style="color:#374151; font-size:16px; margin:30px 0 8px;">Good luck! We're excited to learn more about you. 🌟</p>
+              <p style="color:#374151; font-size:16px; margin:0;">Best regards,</p>
+              <p style="color:#667eea; font-size:16px; font-weight:bold; margin:5px 0 0;">${companyName} Hiring Team</p>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#f9fafb; padding:24px; text-align:center; border-top:1px solid #e5e7eb;">
+              <p style="margin:0 0 8px; color:#6b7280; font-size:13px;">This is an automated message from ${companyName}</p>
+              <p style="margin:0; color:#9ca3af; font-size:12px;">Powered by Mekyek AI Interview Platform</p>
+              <p style="margin:8px 0 0; color:#9ca3af; font-size:12px;">© ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+            </td>
+          </tr>
+          
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
       `,
       text: `
+${companyName} - AI Interview Invitation
+
 Dear ${candidateName},
 
-We were impressed by your application and would like to invite you to interview for the ${jobRole} position at Mekyek.
+Congratulations! We were impressed by your application and would like to invite you to an AI-powered interview for the ${jobRole} position at ${companyName}.
 
-Interview Details:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+YOUR LOGIN CREDENTIALS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 Interview ID: ${interviewId}
 Password: ${tempPassword}
 Position: ${jobRole}
-Required Skills: ${skillsList}
 Duration: ~45 minutes
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Login here: ${loginUrl}
+Start Interview: ${loginUrl}
 
-Please note that you can only take this interview once. Ensure you're in a quiet environment with:
-- Stable internet connection
-- Working webcam and microphone
-- Desktop or laptop (mobile not recommended)
-- At least 45 minutes of uninterrupted time
+⚠️ IMPORTANT: You can only take this interview ONCE. Please ensure you're fully prepared before starting.
+
+BEFORE YOU START:
+✅ Stable internet connection (minimum 5 Mbps)
+✅ Working webcam and microphone
+✅ Desktop or laptop (mobile not supported)
+✅ Quiet environment with good lighting
+✅ At least 60 minutes of uninterrupted time
+✅ Chrome or Firefox browser (latest version)
+
+Good luck! We're excited to learn more about you.
 
 Best regards,
-Mekyek Hiring Team
+${companyName} Hiring Team
 
-© ${new Date().getFullYear()} Mekyek. All rights reserved.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Powered by Mekyek AI Interview Platform
+© ${new Date().getFullYear()} ${companyName}. All rights reserved.
       `.trim()
     };
 
     const info = await transporter.sendMail(mailOptions);
 
-    console.log('✅ Email sent successfully');
+    console.log('✅ Email sent successfully via Brevo');
     console.log('   Message ID:', info.messageId);
     console.log('   Accepted:', info.accepted);
+    console.log('   Response:', info.response);
 
     return {
       success: true,
@@ -270,17 +238,19 @@ Mekyek Hiring Team
     };
 
   } catch (error) {
-    console.error('❌ Email sending failed:', error.message);
+    console.error('❌ Brevo email sending failed:', error.message);
     
-    // Log detailed error for debugging
     if (error.code) {
       console.error('   Error code:', error.code);
     }
     if (error.response) {
       console.error('   SMTP response:', error.response);
     }
+    if (error.responseCode) {
+      console.error('   Response code:', error.responseCode);
+    }
     
-    throw new Error(`Email sending failed: ${error.message}`);
+    throw new Error(`Brevo email failed: ${error.message}`);
   }
 };
 

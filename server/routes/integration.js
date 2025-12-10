@@ -241,23 +241,23 @@ router.get("/company-interviews/:companyId", async (req, res) => {
 });
 
 // This stays as is - with setImmediate email sending
-setImmediate(async () => {
-  try {
-    await sendInterviewEmail({
-      to: candidateEmail,
-      candidateName,
-      jobRole,
-      interviewId,
-      tempPassword,
-      skills: Array.isArray(skills) ? skills : [skills],
-      loginUrl,
-      companyName: companyName || "Your Company"
-    });
-    console.log("✅ Email sent successfully to:", candidateEmail);
-  } catch (emailError) {
-    console.error("❌ Email sending failed (non-critical):", emailError.message);
-  }
-});
+// setImmediate(async () => {
+//   try {
+//     await sendInterviewEmail({
+//       to: candidateEmail,
+//       candidateName,
+//       jobRole,
+//       interviewId,
+//       tempPassword,
+//       skills: Array.isArray(skills) ? skills : [skills],
+//       loginUrl,
+//       companyName: companyName || "Your Company"
+//     });
+//     console.log("✅ Email sent successfully to:", candidateEmail);
+//   } catch (emailError) {
+//     console.error("❌ Email sending failed (non-critical):", emailError.message);
+//   }
+// });
 
 
 export default router;
