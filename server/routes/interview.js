@@ -123,7 +123,7 @@ router.post("/:interviewId/next-question", async (req, res) => {
     }
 
     const conversationHistory = interview.conversationHistory || [];
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // ✅ FIXED
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" }); 
 
     let prompt = "";
 
@@ -368,7 +368,6 @@ router.post("/:interviewId/status", async (req, res) => {
 });
 
 // evaluate interview
-// evaluate interview
 router.post("/:interviewId/evaluate", async (req, res) => {
   try {
     const { interviewId } = req.params;
@@ -466,7 +465,7 @@ router.post("/:interviewId/evaluate", async (req, res) => {
       return res.status(400).json({ error: "Insufficient content to evaluate" });
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" }); 
 
     const evaluationPrompt = `You are an interview evaluator. Evaluate the following interview for a ${interview.role} position requiring ${interview.experience} years experience.
 
@@ -486,11 +485,10 @@ Return evaluation in valid JSON format with these fields:
     const result = await model.generateContent(evaluationPrompt);
     const responseText = result.response.text();
 
-    // ✅ FIXED: Extract JSON with proper regex
+    // Extract JSON
     let jsonMatch = responseText.match(/\{[\s\S]*\}/);
     
     if (!jsonMatch) {
-      // Remove markdown code blocks (``````)
       const cleanedText = responseText.replace(/``````\n?/g, '');
       jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
     }
@@ -549,6 +547,5 @@ Return evaluation in valid JSON format with these fields:
     });
   }
 });
-
 
 export default router;
