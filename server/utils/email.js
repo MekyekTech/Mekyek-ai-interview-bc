@@ -1,37 +1,22 @@
-import nodemailer from "nodemailer";
+import * as brevo from '@getbrevo/brevo';
 
-// Create transporter with Brevo SMTP
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp-relay.brevo.com",
-  port: parseInt(process.env.SMTP_PORT || "587"),
-  secure: false, // Use TLS (STARTTLS)
-  auth: {
-    user: process.env.SMTP_USER, 
-    pass: process.env.SMTP_PASS, 
-  },
-  tls: {
-    rejectUnauthorized: true, // Brevo has valid certificates
-    minVersion: 'TLSv1.2'
-  }
-});
+// Initialize Brevo API
+let apiInstance = null;
 
-// Verify connection on startup
-transporter.verify((error, success) => {
-  if (error) {
-    console.error("❌ Brevo SMTP connection failed:", error.message);
-    console.error("   Check your Brevo SMTP credentials in .env");
-    console.error("   Host:", process.env.SMTP_HOST || "smtp-relay.brevo.com");
-    console.error("   Port:", process.env.SMTP_PORT || "587");
-    console.error("   User:", process.env.SMTP_USER);
-  } else {
-    console.log("✅ Brevo Email service ready");
-    console.log(`   Using Brevo SMTP: ${process.env.SMTP_USER}`);
-    console.log("   Host: smtp-relay.brevo.com");
+const initBrevoAPI = () => {
+  if (!apiInstance && process.env.BREVO_API_KEY) {
+    apiInstance = new brevo.TransactionalEmailsApi();
+    apiInstance.setApiKey(
+      brevo.TransactionalEmailsApiApiKeys.apiKey,
+      process.env.BREVO_API_KEY
+    );
+    console.log('✅ Brevo API initialized');
   }
-});
+  return apiInstance;
+};
 
 /**
- * Send interview invitation email via Brevo
+ * Send interview invitation email via Brevo API
  * @param {Object} params - Email parameters
  */
 export const sendInterviewEmail = async ({
@@ -45,11 +30,17 @@ export const sendInterviewEmail = async ({
   companyName = "Mekyek"
 }) => {
   try {
-    console.log('\n📧 Sending interview invitation via Brevo');
+    console.log('\n📧 Sending interview invitation via Brevo API');
     console.log('   To:', to);
     console.log('   Company:', companyName);
     console.log('   Role:', jobRole);
     console.log('   Interview ID:', interviewId);
+
+    const api = initBrevoAPI();
+    
+    if (!api) {
+      throw new Error('Brevo API not configured. Please set BREVO_API_KEY in environment variables.');
+    }
 
     const skillsList = Array.isArray(skills) ? skills.join(', ') : skills;
     const currentDate = new Date().toLocaleDateString('en-US', { 
@@ -58,14 +49,20 @@ export const sendInterviewEmail = async ({
       day: 'numeric' 
     });
 
-    const mailOptions = {
-      from: {
-        name: companyName || 'Mekyek',
-        address: 'mekyek.tech@gmail.com'
-      },
-      to: to,
-      subject: `AI Interview Invitation - ${jobRole} at ${companyName}`,
-      html: `
+    const sendSmtpEmail = new brevo.SendSmtpEmail();
+    
+    sendSmtpEmail.subject = `AI Interview Invitation - ${jobRole} at ${companyName}`;
+    sendSmtpEmail.to = [{ email: to, name: candidateName }];
+    sendSmtpEmail.sender = { 
+      name: companyName || 'MEKYEK', 
+      email: 'mekyek.tech@gmail.com' 
+    };
+    sendSmtpEmail.replyTo = { 
+      email: 'mekyek.tech@gmail.com', 
+      name: companyName 
+    };
+    
+    sendSmtpEmail.htmlContent = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -182,8 +179,9 @@ export const sendInterviewEmail = async ({
   </table>
 </body>
 </html>
-      `,
-      text: `
+    `;
+
+    sendSmtpEmail.textContent = `
 ${companyName} - AI Interview Invitation
 
 Dear ${candidateName},
@@ -221,36 +219,26 @@ ${companyName} Hiring Team
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Powered by Mekyek AI Interview Platform
 © ${new Date().getFullYear()} ${companyName}. All rights reserved.
-      `.trim()
-    };
+    `.trim();
 
-    const info = await transporter.sendMail(mailOptions);
+    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
 
-    console.log('✅ Email sent successfully via Brevo');
-    console.log('   Message ID:', info.messageId);
-    console.log('   Accepted:', info.accepted);
-    console.log('   Response:', info.response);
+    console.log('✅ Email sent successfully via Brevo API');
+    console.log('   Message ID:', result.body.messageId);
 
     return {
       success: true,
-      messageId: info.messageId,
-      accepted: info.accepted
+      messageId: result.body.messageId,
     };
 
   } catch (error) {
-    console.error('❌ Brevo email sending failed:', error.message);
+    console.error('❌ Brevo API error:', error.message);
     
-    if (error.code) {
-      console.error('   Error code:', error.code);
-    }
     if (error.response) {
-      console.error('   SMTP response:', error.response);
-    }
-    if (error.responseCode) {
-      console.error('   Response code:', error.responseCode);
+      console.error('   API Response:', error.response.body);
     }
     
-    throw new Error(`Brevo email failed: ${error.message}`);
+    throw new Error(`Brevo API failed: ${error.message}`);
   }
 };
 
