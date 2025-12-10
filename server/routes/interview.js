@@ -123,7 +123,7 @@ router.post("/:interviewId/next-question", async (req, res) => {
     }
 
     const conversationHistory = interview.conversationHistory || [];
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // ✅ FIXED
 
     let prompt = "";
 
@@ -368,6 +368,7 @@ router.post("/:interviewId/status", async (req, res) => {
 });
 
 // evaluate interview
+// evaluate interview
 router.post("/:interviewId/evaluate", async (req, res) => {
   try {
     const { interviewId } = req.params;
@@ -465,7 +466,7 @@ router.post("/:interviewId/evaluate", async (req, res) => {
       return res.status(400).json({ error: "Insufficient content to evaluate" });
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const evaluationPrompt = `You are an interview evaluator. Evaluate the following interview for a ${interview.role} position requiring ${interview.experience} years experience.
 
@@ -474,20 +475,28 @@ Required Skills: ${interview.skills.join(", ")}
 Interview Responses:
 ${evaluationText}
 
-Return evaluation in valid JSON only.`;
+Return evaluation in valid JSON format with these fields:
+- overallScore (number 0-100)
+- answers (array of objects with: question, score, feedback)
+- strengths (array of strings)
+- weaknesses (array of strings)
+- summary (string)
+- recommendation (string: PASS/FAIL)`;
 
     const result = await model.generateContent(evaluationPrompt);
     const responseText = result.response.text();
 
-    // extract JSON
+    // ✅ FIXED: Extract JSON with proper regex
     let jsonMatch = responseText.match(/\{[\s\S]*\}/);
     
     if (!jsonMatch) {
+      // Remove markdown code blocks (``````)
       const cleanedText = responseText.replace(/``````\n?/g, '');
       jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
     }
 
     if (!jsonMatch) {
+      console.error("AI Response:", responseText);
       throw new Error("Invalid AI response format");
     }
 
@@ -540,5 +549,6 @@ Return evaluation in valid JSON only.`;
     });
   }
 });
+
 
 export default router;
