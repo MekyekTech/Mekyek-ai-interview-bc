@@ -123,7 +123,7 @@ router.post("/:interviewId/next-question", async (req, res) => {
     }
 
     const conversationHistory = interview.conversationHistory || [];
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" }); 
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" }); 
 
     let prompt = "";
 
@@ -465,7 +465,7 @@ router.post("/:interviewId/evaluate", async (req, res) => {
       return res.status(400).json({ error: "Insufficient content to evaluate" });
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" }); 
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" }); 
 
     const evaluationPrompt = `You are an interview evaluator. Evaluate the following interview for a ${interview.role} position requiring ${interview.experience} years experience.
 
